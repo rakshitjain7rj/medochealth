@@ -4,6 +4,14 @@ A backend service that manages token allocation for hospital Out-Patient Departm
 
 ---
 
+## Sample API Output
+
+![OPD Slot API Response](./screenshots/opd-api-slots-response.png)
+
+This screenshot shows a successful response from the GET /doctors/:doctorId/slots API. It confirms that the server is running, in-memory data is initialized, and slot/token allocation logic is functioning as expected.
+
+---
+
 ## Key Design Highlights
 
 - **Domain-Driven Design**: Core domain types (`Token`, `Slot`, `Doctor`) are cleanly separated from business logic and API concerns.
@@ -156,11 +164,3 @@ All tests target the service layer functions directly, validating that the alloc
 3. **In-Memory Store**: Data is held in `src/store/inMemoryStore.ts` and resets on server restart. Three sample doctors with slots are pre-loaded.
 
 4. **Project Completeness**: This project represents Phase 7 of the implementation. Core allocation logic, tests, and API are complete and final.
-
----
-
-## Sample API Output
-
-![OPD Slot API Response](./screenshots/opd-api-slots-response.png)
-
-This screenshot shows a successful response from the GET /doctors/:doctorId/slots API. It confirms that the server is running, in-memory data is initialized, and slot/token allocation logic is functioning as expected.
