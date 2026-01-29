@@ -161,6 +161,6 @@ All tests target the service layer functions directly, validating that the alloc
 
 ## Sample API Output
 
-![OPD Slot API Response](./screenshots/opd-api-response.png)
+![OPD Slot API Response](./screenshots/opd-api-slots-response.png)
 
 This screenshot shows a successful response from the GET /doctors/:doctorId/slots API. It confirms that the server is running, in-memory data is initialized, and slot/token allocation logic is functioning as expected.
