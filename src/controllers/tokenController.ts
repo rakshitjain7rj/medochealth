@@ -1,7 +1,7 @@
 /**
  * Token Controller
- * Handles HTTP requests for token operations
- * Delegates all business logic to service layer
+ * Thin handlers for token operations
+ * Delegates ALL logic to service layer
  */
 
 import { Request, Response } from "express";
@@ -9,7 +9,7 @@ import { Token } from "../domain/Token";
 import { TokenSource, TokenStatus, PriorityLevel } from "../domain/enums";
 import { allocateTokenToSlot } from "../services/allocationEngine";
 import { applyAllocationResult, cancelToken, markNoShow } from "../services/slotMutator";
-import { findSlot, findSlotByTokenId } from "../store/inMemoryStore";
+import { store } from "../store/inMemoryStore";
 
 /**
  * POST /tokens
@@ -18,16 +18,26 @@ import { findSlot, findSlotByTokenId } from "../store/inMemoryStore";
 export function createTokenHandler(req: Request, res: Response): void {
   const { doctorId, slotId, patientId, source, priority, movable } = req.body;
 
-  // Find the target slot
-  const slot = findSlot(doctorId, slotId);
+  // Defensively find doctor
+  const doctor = store.doctors.find((d) => d.id === doctorId);
+  if (!doctor) {
+    res.status(404).json({ error: "Doctor not found" });
+    return;
+  }
+
+  // Defensively find slot
+  const slot = doctor.slots.find((s) => s.id === slotId);
   if (!slot) {
     res.status(404).json({ error: "Slot not found" });
     return;
   }
 
+  // Generate globally unique token ID
+  const tokenId = `${doctorId}-${slotId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
   // Create the token
   const token: Token = {
-    id: `token-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    id: tokenId,
     patientId: patientId || `patient-${Date.now()}`,
     doctorId,
     slotId,
@@ -41,7 +51,7 @@ export function createTokenHandler(req: Request, res: Response): void {
   // Delegate to allocation engine (decision only)
   const result = allocateTokenToSlot(slot, token);
 
-  // Apply the decision (mutation)
+  // Apply the decision via mutator (controlled mutation)
   applyAllocationResult(slot, result);
 
   // Return result with updated slot state
@@ -58,58 +68,68 @@ export function createTokenHandler(req: Request, res: Response): void {
 
 /**
  * POST /tokens/:tokenId/cancel
- * Cancels an existing token
+ * Cancels an existing token by searching all doctors and slots
  */
 export function cancelTokenHandler(req: Request, res: Response): void {
   const { tokenId } = req.params;
 
-  // Find the slot containing this token
-  const found = findSlotByTokenId(tokenId);
-  if (!found) {
-    res.status(404).json({ error: "Token not found" });
-    return;
+  // Search ALL doctors and ALL slots for the token
+  for (const doctor of store.doctors) {
+    for (const slot of doctor.slots) {
+      const inTokens = slot.tokens.some((t) => t.id === tokenId);
+      const inWaitlist = slot.waitlist.some((t) => t.id === tokenId);
+
+      if (inTokens || inWaitlist) {
+        // Delegate to mutator
+        cancelToken(slot, tokenId);
+
+        res.status(200).json({
+          message: "Token cancelled successfully",
+          slot: {
+            id: slot.id,
+            tokensCount: slot.tokens.length,
+            waitlistCount: slot.waitlist.length,
+          },
+        });
+        return;
+      }
+    }
   }
 
-  const { slot } = found;
-
-  // Delegate to mutator
-  cancelToken(slot, tokenId);
-
-  res.status(200).json({
-    message: "Token cancelled successfully",
-    slot: {
-      id: slot.id,
-      tokensCount: slot.tokens.length,
-      waitlistCount: slot.waitlist.length,
-    },
-  });
+  // Token not found in any slot
+  res.status(404).json({ error: "Token not found" });
 }
 
 /**
  * POST /tokens/:tokenId/no-show
- * Marks a token as no-show
+ * Marks a token as no-show by searching all doctors and slots
  */
 export function markNoShowHandler(req: Request, res: Response): void {
   const { tokenId } = req.params;
 
-  // Find the slot containing this token
-  const found = findSlotByTokenId(tokenId);
-  if (!found) {
-    res.status(404).json({ error: "Token not found" });
-    return;
+  // Search ALL doctors and ALL slots for the token
+  for (const doctor of store.doctors) {
+    for (const slot of doctor.slots) {
+      const inTokens = slot.tokens.some((t) => t.id === tokenId);
+      const inWaitlist = slot.waitlist.some((t) => t.id === tokenId);
+
+      if (inTokens || inWaitlist) {
+        // Delegate to mutator
+        markNoShow(slot, tokenId);
+
+        res.status(200).json({
+          message: "Token marked as no-show",
+          slot: {
+            id: slot.id,
+            tokensCount: slot.tokens.length,
+            waitlistCount: slot.waitlist.length,
+          },
+        });
+        return;
+      }
+    }
   }
 
-  const { slot } = found;
-
-  // Delegate to mutator
-  markNoShow(slot, tokenId);
-
-  res.status(200).json({
-    message: "Token marked as no-show",
-    slot: {
-      id: slot.id,
-      tokensCount: slot.tokens.length,
-      waitlistCount: slot.waitlist.length,
-    },
-  });
+  // Token not found in any slot
+  res.status(404).json({ error: "Token not found" });
 }
